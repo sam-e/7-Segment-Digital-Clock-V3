@@ -2,6 +2,7 @@ import network
 import veml7700
 import utime
 import math
+from credentials import CREDENTIALS
 from ledvals import LEDVALS
 from machine import Pin, I2C, Timer
 from neopixel import NeoPixel
@@ -22,19 +23,23 @@ i2c = I2C(1, scl=scl_pin, sda=sda_pin)
 DS3231 = DS3231(i2c)
 VEML = veml7700.VEML7700(address=0x10, i2c=i2c, it=100, gain=1/8)
 
+# The LEDs values object
+# Wifi credentials
+ledvals = LEDVALS(LEDVALS.FUCHSIA, 255)
+creds = CREDENTIALS
+
 # Network setup
 sta_if = network.WLAN(network.STA_IF)
 if not sta_if.isconnected():
     print('connecting to network...')
     sta_if.active(True)
-    sta_if.connect('SSID', 'PASSWORD')
+    sta_if.connect(creds.SSID, creds.PSWD)
     while not sta_if.isconnected():	
         print(".", end="")
       		
 print('network config:', sta_if.ifconfig())
 
-# The LEDs values object
-ledvals = LEDVALS(LEDVALS.FUCHSIA, 255)
+
 
 
 
@@ -67,20 +72,22 @@ def updateClock():
     # Variable to adjust local time
     
     utc_shift = 10
-    #Get the time from the system
+    #Get the time from the RTC, get_time(True) updates system time
+    DS3231.get_time(True)
     clockTime = utime.localtime(utime.mktime(utime.localtime()) + utc_shift*3600)
- 
+
+    
     #Offsets for individual numbers
     DIG_1 = 0
     DIG_2 = 7
     DIG_3 = 16
     DIG_4 = 23
-
+    
     fMdig = truncate(clockTime[4] /10)
     sMdig = clockTime[4]  % 10
     
-    fHdig = truncate(clockTime[3]  /10)
-    sHdig = clockTime[3]  % 10
+    fHdig = truncate((clockTime[3])  /10)
+    sHdig = (clockTime[3])  % 10
     
     updateLED(DIG_1, sMdig)
     updateLED(DIG_2, round(fMdig))
@@ -97,11 +104,14 @@ def updateDots():
     if dotsOn != True: ledvals.setDots(True) 
     else: ledvals.setDots(False)
     
-    #Get the led array values from the led object
-    r_val = int(ledvals.get_rColorval()*0.3)
-    g_val = int(ledvals.get_gColorval()*0.3)
-    b_val = int(ledvals.get_bColorval()*0.3)
+    r_val = ledvals.get_rColorval()
+    g_val = ledvals.get_gColorval()
+    b_val = ledvals.get_bColorval()
     
+    if r_val > 8: r_val = int(r_val*0.3)
+    if g_val > 8: g_val = int(g_val*0.3)
+    if b_val > 8: b_val = int(b_val*0.3)
+    #print(r_val, g_val, b_val)
   
     if dotsOn:
         LEDs[14] = (r_val, g_val, b_val)
@@ -113,43 +123,56 @@ def updateDots():
 
 
 def updateBrightness():
-    print(VEML.read_lux())
+    #lux = 0
     
     if VEML.read_lux() < 8:
         lux = 8
-    if VEML.read_lux() > 120:
+    elif VEML.read_lux() > 120:
         lux = 120
     else:
         lux = VEML.read_lux()
-        
-    #print((lux / 120)* ledvals.get_Brightval())
+    #print(VEML.read_lux())   
+    #print(lux)
     ledvals.updateBrightness(lux)
     
     
     
-def updateColor(newval):
+def updateColor(oldval):
     global ledvals
+    
     val = round((DS3231.get_temperature())-3)
     
-    print(val)
-    print (ledvals.get_gColorval())
+    # Only update if the temp has changed
+    if val != oldval:
+        print("Color Update")
+   
+        if val == 23:
+            ledvals.setColor(ledvals.BLUE)
+            updateBrightness()
+        if val == 24:
+            ledvals.setColor(ledvals.VIOLET)
+            updateBrightness()
+        if val == 25:
+            ledvals.setColor(ledvals.CYAN)
+            updateBrightness()
+        if val == 26:
+            ledvals.setColor(ledvals.GREEN)
+            updateBrightness()
+        if val == 27:
+            ledvals.setColor(ledvals.FUCHSIA)
+            updateBrightness()
+        if val == 28:
+            ledvals.setColor(ledvals.RED)
+            updateBrightness()
+        #print(val)
     
-    if val != newval:
-        if val == 23: ledvals.setColor(ledvals.BLUE)
-        if val == 24: ledvals.setColor(ledvals.VIOLET)
-        if val == 25: ledvals.setColor(ledvals.CYAN)
-        if val == 26: ledvals.setColor(ledvals.GREEN)
-        if val == 27: ledvals.setColor(ledvals.FUCHSIA)
-        if val == 28: ledvals.setColor(ledvals.RED)
-        return val
-    
-    return newval
-
+    # Set the new temp value
+    ledvals.set_RTCTemp(val) 
 
 
 
 def updateRTC():
-    # Synchronise time and the DS3231 RTC
+    # Synchronise system time and the DS3231 RTC
     import ntptime
     utc_shift = 10
 
@@ -157,36 +180,34 @@ def updateRTC():
     ntptime.settime()
     print("Local time after synchronization：%s" %str(utime.localtime()))
 
-    #localTime = utime.localtime(utime.mktime(utime.localtime()) + utc_shift*3600)
     DS3231.save_time()
 
-    print('Initial values')
-    print('DS3231 time:', DS3231.get_time())
-    #print('Board time: ', localTime)
 
 
-
-# Global integer for the millisecond timer loop
+# Global for the millisecond and second timer loop
+milliSec = 0
 oneSec = 0
 
-# On start sync RTC and time
-updateRTC()
-
-#ledvals.set_rColorval(255)
-#ledvals.set_bColorval(255)
-#ledvals.setBrightness(1)
-temp=0
-
+# While loop for clock update
 while True:
     # 1000 millisecond or second function
-    current = int(utime.ticks_ms())
+    millis = int(utime.ticks_ms())
+    secs = utime.time()
+    # Update the LEDx
     LEDs.write()
     
+    # Sync the RTC every 10 minutes
+    if secs - oneSec >= 3600:
+        oneSec = secs
+        updateRTC()
     
     # 1 second loop
-    if current - oneSec >= 1000:
-        oneSec = current
+    if millis - milliSec >= 1000:
+        milliSec = millis
         updateDots()        
         updateClock()
         updateBrightness()
-        temp = updateColor(temp)
+        updateColor(ledvals.get_RTCTemp())
+        
+
+        
