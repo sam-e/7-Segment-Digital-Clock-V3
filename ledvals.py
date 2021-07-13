@@ -1,5 +1,5 @@
 """
-Class for the NEOPIXEL LEDs object variables
+Class for the NEOPIXEL LEDs object variablesclass
 """
 
 class LEDVALS:
@@ -23,6 +23,7 @@ class LEDVALS:
       }
     
     def __init__(self, rgb, brightval):
+        # RGB color and brightness variables
         self.Brightval = brightval
         self.rColorval = rgb[0]
         self.gColorval = rgb[1]
@@ -30,10 +31,14 @@ class LEDVALS:
         self.rBrightval = 0
         self.gBrightval = 0
         self.bBrightval = 0
+ 
+        self.dotsOn = False
         
+        self.RTCTemp = 0
+        
+        # Set the brightness on start
         self.setBrightness(brightval)
         
-        self.dotsOn = False
 
 
     def getDots(self):
@@ -65,6 +70,12 @@ class LEDVALS:
     
     def set_bColorval(self, val):
         self.bColorval = val
+        
+    def set_RTCTemp(self, val):
+        self.RTCTemp = val
+    
+    def get_RTCTemp(self):
+        return int(self.RTCTemp)      
         
     def setBrightness(self, brightval):
         self.rColorval = (brightval / 255)*self.rColorval
