@@ -41,8 +41,6 @@ print('network config:', sta_if.ifconfig())
 
 
 
-
-
 def truncate(n, decimals=0):
     multiplier = 10 ** decimals
     return math.floor(int(n * multiplier) / multiplier)
